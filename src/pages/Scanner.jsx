@@ -158,23 +158,48 @@ const Scanner = () => {
 
     setSaving(true);
     try {
-      // 0. Prevención de duplicados
-      let duplicateQuery = supabase.from('tickets').select('id');
+      // 0. Prevención de duplicados mejorada con normalización
+      const normalizeText = (text) => {
+        if (!text) return '';
+        return text.toLowerCase().replace(/[^a-z0-9]/g, '');
+      };
+
+      const normalizedInputEst = normalizeText(establishment);
+      const numericAmount = parseFloat(amount);
+      let isDuplicate = false;
+
       if (ticketReference.trim()) {
-        duplicateQuery = duplicateQuery
+        const { data: refMatches, error: refError } = await supabase
+          .from('tickets')
+          .select('id, establishment')
           .eq('user_id', user.id)
-          .eq('ticket_reference', ticketReference.trim())
-          .eq('establishment', establishment.trim());
+          .eq('ticket_reference', ticketReference.trim());
+          
+        if (!refError && refMatches && refMatches.length > 0) {
+          // Comprobar coincidencia del establecimiento normalizado (flexible)
+          isDuplicate = refMatches.some(dbTicket => {
+            const dbEst = normalizeText(dbTicket.establishment);
+            return dbEst.includes(normalizedInputEst) || normalizedInputEst.includes(dbEst);
+          });
+        }
       } else {
-        duplicateQuery = duplicateQuery
+        const { data: dateAmountMatches, error: daError } = await supabase
+          .from('tickets')
+          .select('id, establishment')
           .eq('user_id', user.id)
-          .eq('establishment', establishment.trim())
           .eq('ticket_date', date)
-          .eq('total_amount', parseFloat(amount));
+          .eq('total_amount', numericAmount);
+          
+        if (!daError && dateAmountMatches && dateAmountMatches.length > 0) {
+          // Comprobar coincidencia del establecimiento normalizado (flexible)
+          isDuplicate = dateAmountMatches.some(dbTicket => {
+            const dbEst = normalizeText(dbTicket.establishment);
+            return dbEst.includes(normalizedInputEst) || normalizedInputEst.includes(dbEst);
+          });
+        }
       }
 
-      const { data: duplicateData, error: duplicateError } = await duplicateQuery;
-      if (!duplicateError && duplicateData && duplicateData.length > 0) {
+      if (isDuplicate) {
         const proceed = window.confirm('Ya existe un ticket parecido. Revisa si lo estás duplicando.\n\n¿Deseas guardarlo de todas formas?');
         if (!proceed) {
           setSaving(false);
