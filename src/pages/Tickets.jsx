@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 
@@ -39,6 +39,42 @@ const Tickets = () => {
       fetchTickets();
     }
   }, [category, user]);
+
+  const handleDelete = async (e, ticket) => {
+    e.stopPropagation();
+
+    if (!window.confirm('¿Eliminar este ticket?')) {
+      return;
+    }
+
+    try {
+      // 1. Borrar archivo del Bucket de Supabase Storage si existe
+      if (ticket.image_url) {
+        const { error: storageError } = await supabase.storage
+          .from('ticket-images')
+          .remove([ticket.image_url]);
+        
+        if (storageError) {
+          console.warn('Advertencia al borrar la imagen de storage:', storageError.message);
+        }
+      }
+
+      // 2. Borrar registro de la Base de Datos
+      const { error: dbError } = await supabase
+        .from('tickets')
+        .delete()
+        .eq('id', ticket.id)
+        .eq('user_id', user.id);
+
+      if (dbError) throw dbError;
+
+      // 3. Actualizar estado local para refrescar el listado sin recargar
+      setTickets(currentTickets => currentTickets.filter(t => t.id !== ticket.id));
+    } catch (error) {
+      console.error('Error deleting ticket:', error.message);
+      alert('Hubo un error al eliminar el ticket: ' + error.message);
+    }
+  };
 
   const getTitle = () => {
     switch(category) {
@@ -104,28 +140,34 @@ const Tickets = () => {
           </div>
         ) : tickets.length > 0 ? (
           tickets.map(ticket => (
-            <Link 
+            <div 
               key={ticket.id} 
-              to={`/tickets/detail/${ticket.id}`}
-              className="bg-surface-container-lowest p-4 rounded-2xl border border-outline-variant/20 shadow-sm flex items-center gap-4 active:scale-[0.98] transition-all cursor-pointer hover:border-primary/20"
+              onClick={() => navigate(`/tickets/detail/${ticket.id}`)}
+              className="bg-surface-container-lowest p-4 rounded-2xl border border-outline-variant/20 shadow-sm flex items-center gap-4 active:scale-[0.98] transition-all cursor-pointer hover:border-primary/20 relative"
             >
               <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${getCategoryColor(ticket.ticket_type)}`}>
                 <span className="material-symbols-outlined">{getCategoryIcon(ticket.ticket_type)}</span>
               </div>
-              <div className="flex-1 min-w-0">
+              <div className="flex-1 min-w-0 pr-6">
                 <h3 className="font-headline font-semibold text-on-surface truncate">{ticket.establishment}</h3>
                 <p className="text-xs text-on-surface-variant truncate">
                   {formatDate(ticket.ticket_date)} • {getCategoryLabel(ticket.ticket_type)}
                   {ticket.ticket_reference && ` • Ref: ${ticket.ticket_reference}`}
                 </p>
-              </div>
-              <div className="text-right flex flex-col items-end gap-1">
-                <p className="font-headline font-bold text-primary">
+                <p className="font-headline font-bold text-primary mt-1">
                   {typeof ticket.total_amount === 'number' ? ticket.total_amount.toFixed(2) : parseFloat(ticket.total_amount).toFixed(2)}€
                 </p>
-                <span className="material-symbols-outlined text-on-surface-variant/40 text-sm">chevron_right</span>
               </div>
-            </Link>
+              <div className="flex flex-col items-center justify-center h-full">
+                <button
+                  onClick={(e) => handleDelete(e, ticket)}
+                  className="p-2 rounded-full text-error/60 hover:bg-error/10 hover:text-error transition-colors active:scale-90"
+                  aria-label="Eliminar ticket"
+                >
+                  <span className="material-symbols-outlined text-xl">delete</span>
+                </button>
+              </div>
+            </div>
           ))
         ) : (
           <div className="py-20 text-center bg-surface-container-low rounded-3xl border border-outline-variant/10">
