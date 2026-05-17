@@ -116,6 +116,7 @@ const Tickets = () => {
                 <h3 className="font-headline font-semibold text-on-surface truncate">{ticket.establishment}</h3>
                 <p className="text-xs text-on-surface-variant truncate">
                   {formatDate(ticket.ticket_date)} • {getCategoryLabel(ticket.ticket_type)}
+                  {ticket.ticket_reference && ` • Ref: ${ticket.ticket_reference}`}
                 </p>
               </div>
               <div className="text-right flex flex-col items-end gap-1">

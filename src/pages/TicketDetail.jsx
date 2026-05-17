@@ -148,6 +148,13 @@ const TicketDetail = () => {
             <span className="text-on-surface-variant font-semibold uppercase tracking-wider">Categoría</span>
             <span className="text-on-surface font-bold">{getCategoryLabel(ticket.ticket_type)}</span>
           </div>
+
+          {ticket.ticket_reference && (
+            <div className="flex justify-between text-sm mt-4">
+              <span className="text-on-surface-variant font-semibold uppercase tracking-wider">Nº ticket / ref</span>
+              <span className="text-on-surface font-bold">{ticket.ticket_reference}</span>
+            </div>
+          )}
           
           <div className="mt-2 border-t border-outline-variant/10 pt-4 text-left">
             <span className="text-xs font-bold text-on-surface-variant uppercase tracking-wider block mb-2">Notas</span>
