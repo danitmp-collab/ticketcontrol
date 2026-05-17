@@ -10,6 +10,8 @@ import NewTicket from './pages/NewTicket';
 import Scanner from './pages/Scanner';
 import TicketDetail from './pages/TicketDetail';
 import Login from './pages/Login';
+import Consultas from './pages/Consultas';
+import Estadisticas from './pages/Estadisticas';
 
 const ProtectedRoutes = () => {
   const { user, loading } = useAuth();
@@ -39,6 +41,10 @@ const ProtectedRoutes = () => {
         <Route path="/tickets" element={<TicketsCategory />} />
         <Route path="/tickets/list/:category" element={<Tickets />} />
         <Route path="/tickets/detail/:id" element={<TicketDetail />} />
+        
+        {/* Consultas y Estadísticas */}
+        <Route path="/consultas" element={<Consultas />} />
+        <Route path="/estadisticas" element={<Estadisticas />} />
         
         {/* Ajustes */}
         <Route path="/settings" element={<Settings />} />
