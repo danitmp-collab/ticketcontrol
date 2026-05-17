@@ -9,6 +9,7 @@ const TicketDetail = () => {
   const { user } = useAuth();
 
   const [ticket, setTicket] = useState(null);
+  const [ticketItems, setTicketItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
 
@@ -16,15 +17,32 @@ const TicketDetail = () => {
     const fetchTicket = async () => {
       try {
         setLoading(true);
-        const { data, error } = await supabase
-          .from('tickets')
-          .select('*')
-          .eq('id', id)
-          .eq('user_id', user.id)
-          .single();
 
-        if (error) throw error;
-        setTicket(data);
+        // Carga paralela: ticket principal + items
+        const [ticketResult, itemsResult] = await Promise.all([
+          supabase
+            .from('tickets')
+            .select('*')
+            .eq('id', id)
+            .eq('user_id', user.id)
+            .single(),
+          supabase
+            .from('ticket_items')
+            .select('id, item_name, quantity, unit_price, total_price, line_order')
+            .eq('ticket_id', id)
+            .eq('user_id', user.id)
+            .order('line_order', { ascending: true }),
+        ]);
+
+        if (ticketResult.error) throw ticketResult.error;
+        setTicket(ticketResult.data);
+
+        // Items son opcionales — si falla, solo avisamos en consola
+        if (itemsResult.error) {
+          console.warn('[ticket_items] No se pudieron cargar los items:', itemsResult.error.message);
+        } else {
+          setTicketItems(itemsResult.data ?? []);
+        }
       } catch (error) {
         console.error('Error fetching ticket:', error.message);
         alert('No se pudo cargar el detalle del ticket.');
@@ -174,6 +192,43 @@ const TicketDetail = () => {
             </div>
           )}
         </div>
+
+        {/* Productos del ticket */}
+        {ticketItems.length > 0 && (
+          <div className="px-6 pb-2">
+            <div className="bg-surface-container rounded-2xl border border-outline-variant/10 overflow-hidden">
+              <div className="flex items-center gap-2 px-4 py-3 border-b border-outline-variant/10">
+                <span className="material-symbols-outlined text-primary text-lg">list_alt</span>
+                <h3 className="font-headline font-bold text-on-surface text-base">Productos del ticket</h3>
+                <span className="ml-auto text-[10px] font-bold text-on-surface-variant bg-surface-container-high px-2 py-0.5 rounded-full uppercase tracking-wider">
+                  {ticketItems.length} líneas
+                </span>
+              </div>
+              <div className="flex flex-col divide-y divide-outline-variant/10">
+                {ticketItems.map((item) => (
+                  <div key={item.id} className="flex items-center justify-between gap-3 px-4 py-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-on-surface text-sm truncate">{item.item_name}</p>
+                      <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
+                        {item.quantity != null && (
+                          <span className="text-[11px] text-on-surface-variant">Cant: {item.quantity}</span>
+                        )}
+                        {item.unit_price != null && (
+                          <span className="text-[11px] text-on-surface-variant">P.u: {parseFloat(item.unit_price).toFixed(2)}€</span>
+                        )}
+                      </div>
+                    </div>
+                    {item.total_price != null && (
+                      <span className="font-headline font-bold text-primary text-sm whitespace-nowrap">
+                        {parseFloat(item.total_price).toFixed(2)}€
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Action Panel */}
         <div className="p-6 bg-surface-container-low flex gap-3">

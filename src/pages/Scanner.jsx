@@ -236,8 +236,8 @@ const Scanner = () => {
         throw new Error('Error de Storage: ' + uploadError.message);
       }
 
-      // 2. Guardar el registro en la tabla de tickets vinculándolo con el user_id
-      const { error: dbError } = await supabase
+      // 2. Guardar el registro en la tabla de tickets — usamos .select().single() para obtener el id real
+      const { data: savedTicket, error: dbError } = await supabase
         .from('tickets')
         .insert({
           user_id: user.id,
@@ -248,12 +248,37 @@ const Scanner = () => {
           image_url: filePath,
           ticket_reference: ticketReference.trim() || null,
           notes: notes.trim() || null
-        });
+        })
+        .select()
+        .single();
 
       if (dbError) {
         // Si falla la BD, intentamos borrar la imagen huérfana de storage
         await supabase.storage.from('ticket-images').remove([filePath]);
         throw new Error('Error de BD: ' + dbError.message);
+      }
+
+      // 3. FASE 2 — Guardar items detectados (silencioso: nunca rompe el guardado principal)
+      if (savedTicket && detectedItems && detectedItems.length > 0) {
+        const itemsPayload = detectedItems.map((item, index) => ({
+          ticket_id:   savedTicket.id,
+          user_id:     user.id,
+          item_name:   item.name,
+          quantity:    item.quantity   ?? null,
+          unit_price:  item.unit_price ?? null,
+          total_price: item.total_price ?? null,
+          raw_line:    item.raw_line   ?? null,
+          line_order:  index,
+        }));
+
+        const { error: itemsError } = await supabase
+          .from('ticket_items')
+          .insert(itemsPayload);
+
+        if (itemsError) {
+          // El ticket ya está guardado. Solo avisamos en consola.
+          console.warn('[ticket_items] Guardado parcial de items fallido:', itemsError.message);
+        }
       }
 
       alert('Ticket guardado correctamente.');
