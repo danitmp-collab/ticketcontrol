@@ -38,7 +38,7 @@ const Home = () => {
 
         <button 
           onClick={() => navigate('/consultas')}
-          className="btn-secondary"
+          className="w-full h-14 bg-[#f3e8ff] text-[#6b21a8] rounded-xl font-headline font-semibold flex items-center justify-center gap-4 active:scale-[0.98] transition-all duration-150"
         >
           <span className="material-symbols-outlined">search</span>
           Consultas
@@ -46,7 +46,7 @@ const Home = () => {
 
         <button 
           onClick={() => navigate('/estadisticas')}
-          className="btn-secondary"
+          className="w-full h-14 bg-[#ffedd5] text-[#9a3412] rounded-xl font-headline font-semibold flex items-center justify-center gap-4 active:scale-[0.98] transition-all duration-150"
         >
           <span className="material-symbols-outlined">bar_chart</span>
           Estadísticas
