@@ -17,6 +17,7 @@ const Scanner = () => {
   const [ticketReference, setTicketReference] = useState('');
   const [saving, setSaving] = useState(false);
   const [reading, setReading] = useState(false);
+  const [detectedItems, setDetectedItems] = useState([]);
 
   const cameraInputRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -67,7 +68,7 @@ const Scanner = () => {
             contents: [{
               parts: [
                 { inline_data: { mime_type: mimeType, data: base64Data } },
-                { text: "Analiza la imagen de este ticket de compra o recibo y extrae la siguiente información estructurada de forma extremadamente precisa:\n- establishment: Nombre del comercio o establecimiento comercial principal (ej: Mercadona, DIA, Carrefour, Restaurante El Paso).\n- total_amount: El importe total final cobrado a pagar como número decimal (ej. 15.42). Omitir subtotales u otros importes.\n- ticket_date: La fecha de emisión del ticket en formato AAAA-MM-DD. Si solo viene el año abreviado, conviértelo (ej. 23 -> 2023).\n- ticket_reference: El número de ticket, número de operación, número de referencia o factura de compra si existe de forma clara. Si no existe o no es identificable, dejar en blanco (cadena vacía)." }
+                { text: "Analiza la imagen de este ticket de compra o recibo y extrae la siguiente información estructurada de forma extremadamente precisa:\n- establishment: Nombre del comercio o establecimiento comercial principal (ej: Mercadona, DIA, Carrefour, Restaurante El Paso).\n- total_amount: El importe total final cobrado a pagar como número decimal (ej. 15.42). Omitir subtotales u otros importes.\n- ticket_date: La fecha de emisión del ticket en formato AAAA-MM-DD. Si solo viene el año abreviado, conviértelo (ej. 23 -> 2023).\n- ticket_reference: El número de ticket, número de operación, número de referencia o factura de compra si existe de forma clara. Si no existe o no es identificable, dejar en blanco (cadena vacía).\n- items: Lista de todos los artículos, productos o consumiciones del ticket. Para cada línea individual extrae:\n  * name: nombre del producto o plato (obligatorio).\n  * quantity: cantidad numérica si aparece explícitamente. Si no aparece, omite este campo.\n  * unit_price: precio unitario si aparece. Si no aparece, omite este campo.\n  * total_price: precio total de esa línea si aparece. Si no aparece, omite este campo.\n  * category: clasifica como 'comida', 'bebida', 'limpieza', 'hogar' u 'otros'. Si no se puede clasificar, omite este campo.\n  Ignora líneas de descuento global, IVA, subtotales y totales. Si el ticket no muestra detalle de artículos, devuelve items como array vacío []." }
               ]
             }],
             generationConfig: {
@@ -78,7 +79,21 @@ const Scanner = () => {
                   establishment: { type: "string" },
                   total_amount: { type: "number" },
                   ticket_date: { type: "string" },
-                  ticket_reference: { type: "string" }
+                  ticket_reference: { type: "string" },
+                  items: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        name:        { type: "string" },
+                        quantity:    { type: "number" },
+                        unit_price:  { type: "number" },
+                        total_price: { type: "number" },
+                        category:    { type: "string" }
+                      },
+                      required: ["name"]
+                    }
+                  }
                 },
                 required: ["establishment", "total_amount", "ticket_date"]
               }
@@ -116,6 +131,8 @@ const Scanner = () => {
         } else {
           setTicketReference('');
         }
+        // Guardar items detectados para mostrar (Fase 0 — solo lectura, sin persistir)
+        setDetectedItems(Array.isArray(resultData.items) ? resultData.items : []);
         
         alert('Lectura del ticket completada con éxito. Revisa los datos y edita si es necesario antes de guardar.');
       }
@@ -139,6 +156,7 @@ const Scanner = () => {
       setDate(new Date().toISOString().split('T')[0]);
       setTicketReference('');
       setNotes('');
+      setDetectedItems([]);
     }
   };
 
@@ -371,6 +389,44 @@ const Scanner = () => {
               className="p-4 rounded-xl border border-outline-variant/30 bg-surface-container-lowest text-on-surface text-sm focus:border-primary focus:outline-none transition-colors resize-none disabled:opacity-50"
             />
           </div>
+          {/* Sección Productos Detectados — Fase 0: solo lectura */}
+          {detectedItems !== undefined && (
+            <div className="w-full max-w-sm mt-4 p-5 bg-surface-container-low rounded-3xl border border-outline-variant/10 shadow-sm flex flex-col gap-3">
+              <div className="flex items-center gap-2 border-b border-outline-variant/10 pb-2">
+                <span className="material-symbols-outlined text-primary text-lg">list_alt</span>
+                <h3 className="font-headline font-bold text-on-surface text-lg">Productos detectados</h3>
+                <span className="ml-auto text-[10px] font-bold text-on-surface-variant bg-surface-container px-2 py-0.5 rounded-full uppercase tracking-wider">Solo lectura</span>
+              </div>
+
+              {detectedItems.length === 0 ? (
+                <p className="text-sm text-on-surface-variant text-center py-3">No se han detectado productos en este ticket.</p>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {detectedItems.map((item, idx) => (
+                    <div key={idx} className="flex items-start justify-between gap-2 bg-surface-container-lowest rounded-xl p-3 border border-outline-variant/10">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-headline font-semibold text-on-surface text-sm truncate">{item.name}</p>
+                        <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
+                          {item.quantity != null && (
+                            <span className="text-[11px] text-on-surface-variant">Cant: {item.quantity}</span>
+                          )}
+                          {item.unit_price != null && (
+                            <span className="text-[11px] text-on-surface-variant">P.u: {item.unit_price.toFixed(2)}€</span>
+                          )}
+                          {item.category && (
+                            <span className="text-[10px] font-bold text-primary/70 bg-primary/8 px-1.5 py-0.5 rounded-full capitalize">{item.category}</span>
+                          )}
+                        </div>
+                      </div>
+                      {item.total_price != null && (
+                        <span className="font-headline font-bold text-primary text-sm whitespace-nowrap">{item.total_price.toFixed(2)}€</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
