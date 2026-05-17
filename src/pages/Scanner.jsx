@@ -168,31 +168,29 @@ const Scanner = () => {
       const numericAmount = parseFloat(amount);
       let isDuplicate = false;
 
-      if (ticketReference.trim()) {
-        const { data: refMatches, error: refError } = await supabase
-          .from('tickets')
-          .select('id, establishment')
-          .eq('user_id', user.id)
-          .eq('ticket_reference', ticketReference.trim());
-          
-        if (!refError && refMatches && refMatches.length > 0) {
-          // Comprobar coincidencia del establecimiento normalizado (flexible)
-          isDuplicate = refMatches.some(dbTicket => {
-            const dbEst = normalizeText(dbTicket.establishment);
-            return dbEst.includes(normalizedInputEst) || normalizedInputEst.includes(dbEst);
-          });
-        }
-      } else {
-        const { data: dateAmountMatches, error: daError } = await supabase
-          .from('tickets')
-          .select('id, establishment')
-          .eq('user_id', user.id)
-          .eq('ticket_date', date)
-          .eq('total_amount', numericAmount);
-          
-        if (!daError && dateAmountMatches && dateAmountMatches.length > 0) {
-          // Comprobar coincidencia del establecimiento normalizado (flexible)
-          isDuplicate = dateAmountMatches.some(dbTicket => {
+      // Consultar posibles coincidencias por usuario, fecha e importe exacto
+      const { data: matches, error: matchError } = await supabase
+        .from('tickets')
+        .select('id, establishment, ticket_reference')
+        .eq('user_id', user.id)
+        .eq('ticket_date', date)
+        .eq('total_amount', numericAmount);
+
+      if (!matchError && matches && matches.length > 0) {
+        const normalizedInputRef = normalizeText(ticketReference);
+        
+        if (normalizedInputRef) {
+          // NO se debe usar solo ticket_reference como clave única, porque en algunos 
+          // restaurantes o TPV la referencia puede repetirse.
+          // Consideramos duplicado si coincide: user_id, ticket_reference normalizada, fecha y total_amount exacto.
+          // No exigimos coincidencia del establecimiento.
+          isDuplicate = matches.some(dbTicket => 
+            normalizeText(dbTicket.ticket_reference) === normalizedInputRef
+          );
+        } else {
+          // Si el ticket NO tiene ticket_reference:
+          // mantener detección por user_id, establecimiento normalizado/flexible, fecha y total_amount exacto
+          isDuplicate = matches.some(dbTicket => {
             const dbEst = normalizeText(dbTicket.establishment);
             return dbEst.includes(normalizedInputEst) || normalizedInputEst.includes(dbEst);
           });
@@ -200,7 +198,7 @@ const Scanner = () => {
       }
 
       if (isDuplicate) {
-        const proceed = window.confirm('Ya existe un ticket parecido. Revisa si lo estás duplicando.\n\n¿Deseas guardarlo de todas formas?');
+        const proceed = window.confirm('Posible ticket duplicado. Revisa si lo estás duplicando.\n\n¿Deseas guardarlo de todas formas?');
         if (!proceed) {
           setSaving(false);
           return;
