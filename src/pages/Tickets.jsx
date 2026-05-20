@@ -10,35 +10,65 @@ const Tickets = () => {
 
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+
+  const PAGE_SIZE = 10;
+
+  const fetchTickets = async (pageNum, replace = false) => {
+    try {
+      if (pageNum === 0) {
+        setLoading(true);
+      } else {
+        setLoadingMore(true);
+      }
+
+      const from = pageNum * PAGE_SIZE;
+      const to = from + PAGE_SIZE - 1;
+
+      let query = supabase
+        .from('tickets')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('ticket_date', { ascending: false })
+        .range(from, to);
+
+      if (category && category !== 'all') {
+        query = query.eq('ticket_type', category);
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+
+      if (replace) {
+        setTickets(data || []);
+        setHasMore((data || []).length === PAGE_SIZE);
+      } else {
+        setTickets(current => [...current, ...(data || [])]);
+        setHasMore((data || []).length === PAGE_SIZE);
+      }
+    } catch (error) {
+      console.error('Error fetching tickets:', error.message);
+    } finally {
+      setLoading(false);
+      setLoadingMore(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchTickets = async () => {
-      try {
-        setLoading(true);
-        let query = supabase
-          .from('tickets')
-          .select('*')
-          .eq('user_id', user.id)
-          .order('ticket_date', { ascending: false });
-
-        if (category && category !== 'all') {
-          query = query.eq('ticket_type', category);
-        }
-
-        const { data, error } = await query;
-        if (error) throw error;
-        setTickets(data || []);
-      } catch (error) {
-        console.error('Error fetching tickets:', error.message);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     if (user) {
-      fetchTickets();
+      setPage(0);
+      fetchTickets(0, true);
     }
   }, [category, user]);
+
+  const handleLoadMore = () => {
+    if (loading || loadingMore || !hasMore) return;
+    const nextPage = page + 1;
+    setPage(nextPage);
+    fetchTickets(nextPage, false);
+  };
 
   const handleDelete = async (e, ticket) => {
     e.stopPropagation();
@@ -133,42 +163,65 @@ const Tickets = () => {
       </div>
 
       <div className="flex flex-col gap-3">
-        {loading ? (
+        {loading && page === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 gap-3">
             <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
             <p className="text-sm text-on-surface-variant">Cargando tus tickets...</p>
           </div>
         ) : tickets.length > 0 ? (
-          tickets.map(ticket => (
-            <div 
-              key={ticket.id} 
-              onClick={() => navigate(`/tickets/detail/${ticket.id}`)}
-              className="bg-surface-container-lowest p-4 rounded-2xl border border-outline-variant/20 shadow-sm flex items-center gap-4 active:scale-[0.98] transition-all cursor-pointer hover:border-primary/20 relative"
-            >
-              <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${getCategoryColor(ticket.ticket_type)}`}>
-                <span className="material-symbols-outlined">{getCategoryIcon(ticket.ticket_type)}</span>
+          <>
+            {tickets.map(ticket => (
+              <div 
+                key={ticket.id} 
+                onClick={() => navigate(`/tickets/detail/${ticket.id}`)}
+                className="bg-surface-container-lowest p-4 rounded-2xl border border-outline-variant/20 shadow-sm flex items-center gap-4 active:scale-[0.98] transition-all cursor-pointer hover:border-primary/20 relative"
+              >
+                <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${getCategoryColor(ticket.ticket_type)}`}>
+                  <span className="material-symbols-outlined">{getCategoryIcon(ticket.ticket_type)}</span>
+                </div>
+                <div className="flex-1 min-w-0 pr-6">
+                  <h3 className="font-headline font-semibold text-on-surface truncate">{ticket.establishment}</h3>
+                  <p className="text-xs text-on-surface-variant truncate">
+                    {formatDate(ticket.ticket_date)} • {getCategoryLabel(ticket.ticket_type)}
+                    {ticket.ticket_reference && ` • Ref: ${ticket.ticket_reference}`}
+                  </p>
+                  <p className="font-headline font-bold text-primary mt-1">
+                    {typeof ticket.total_amount === 'number' ? ticket.total_amount.toFixed(2) : parseFloat(ticket.total_amount).toFixed(2)}€
+                  </p>
+                </div>
+                <div className="flex flex-col items-center justify-center h-full">
+                  <button
+                    onClick={(e) => handleDelete(e, ticket)}
+                    className="p-2 rounded-full text-error/60 hover:bg-error/10 hover:text-error transition-colors active:scale-90"
+                    aria-label="Eliminar ticket"
+                  >
+                    <span className="material-symbols-outlined text-xl">delete</span>
+                  </button>
+                </div>
               </div>
-              <div className="flex-1 min-w-0 pr-6">
-                <h3 className="font-headline font-semibold text-on-surface truncate">{ticket.establishment}</h3>
-                <p className="text-xs text-on-surface-variant truncate">
-                  {formatDate(ticket.ticket_date)} • {getCategoryLabel(ticket.ticket_type)}
-                  {ticket.ticket_reference && ` • Ref: ${ticket.ticket_reference}`}
-                </p>
-                <p className="font-headline font-bold text-primary mt-1">
-                  {typeof ticket.total_amount === 'number' ? ticket.total_amount.toFixed(2) : parseFloat(ticket.total_amount).toFixed(2)}€
-                </p>
-              </div>
-              <div className="flex flex-col items-center justify-center h-full">
-                <button
-                  onClick={(e) => handleDelete(e, ticket)}
-                  className="p-2 rounded-full text-error/60 hover:bg-error/10 hover:text-error transition-colors active:scale-90"
-                  aria-label="Eliminar ticket"
-                >
-                  <span className="material-symbols-outlined text-xl">delete</span>
-                </button>
-              </div>
-            </div>
-          ))
+            ))}
+            
+            {/* Load More Button */}
+            {hasMore && (
+              <button
+                onClick={handleLoadMore}
+                disabled={loadingMore}
+                className="mt-4 w-full h-12 rounded-xl bg-surface-container hover:bg-surface-container-high active:scale-98 transition-all text-xs font-headline font-bold text-primary flex items-center justify-center gap-2 border border-outline-variant/10 shadow-sm disabled:opacity-50"
+              >
+                {loadingMore ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+                    Cargando más...
+                  </>
+                ) : (
+                  <>
+                    <span className="material-symbols-outlined text-base">expand_more</span>
+                    Cargar más tickets
+                  </>
+                )}
+              </button>
+            )}
+          </>
         ) : (
           <div className="py-20 text-center bg-surface-container-low rounded-3xl border border-outline-variant/10">
             <span className="material-symbols-outlined text-6xl text-outline-variant/50 mb-4">search_off</span>

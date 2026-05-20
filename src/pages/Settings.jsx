@@ -18,7 +18,7 @@ const Settings = () => {
     try {
       const { data, error } = await supabase
         .from('tickets')
-        .select('*')
+        .select('*, ticket_items(*)')
         .eq('user_id', user.id);
 
       if (error) throw error;
@@ -66,30 +66,62 @@ const Settings = () => {
           return;
         }
 
-        // Limpiar y mapear tickets para asignarlos al usuario autenticado actual
-        const ticketsToInsert = parsedData.map(ticket => {
+        let importedCount = 0;
+        let itemsCount = 0;
+
+        for (const ticket of parsedData) {
           if (!ticket.establishment || !ticket.ticket_type || !ticket.total_amount) {
             throw new Error('Formato incompleto. Los campos obligatorios son "establishment", "ticket_type" y "total_amount".');
           }
 
-          return {
-            user_id: user.id,
-            ticket_type: ticket.ticket_type,
-            establishment: ticket.establishment.trim(),
-            ticket_date: ticket.ticket_date || new Date().toISOString().split('T')[0],
-            total_amount: parseFloat(ticket.total_amount),
-            image_url: ticket.image_url || null,
-            notes: ticket.notes || null
-          };
-        });
+          // 1. Insertar cabecera del ticket
+          const { data: savedTicket, error: ticketError } = await supabase
+            .from('tickets')
+            .insert({
+              user_id: user.id,
+              ticket_type: ticket.ticket_type,
+              establishment: ticket.establishment.trim(),
+              ticket_date: ticket.ticket_date || new Date().toISOString().split('T')[0],
+              total_amount: parseFloat(ticket.total_amount),
+              image_url: ticket.image_url || null,
+              notes: ticket.notes || null,
+              ticket_reference: ticket.ticket_reference || null
+            })
+            .select()
+            .single();
 
-        const { error } = await supabase
-          .from('tickets')
-          .insert(ticketsToInsert);
+          if (ticketError) throw ticketError;
+          importedCount++;
 
-        if (error) throw error;
+          // 2. Insertar artículos desglosados si existen
+          if (savedTicket && Array.isArray(ticket.ticket_items) && ticket.ticket_items.length > 0) {
+            const itemsToInsert = ticket.ticket_items.map((item, idx) => ({
+              ticket_id: savedTicket.id,
+              user_id: user.id,
+              item_name: (item.item_name || item.name || '').trim(),
+              quantity: item.quantity !== null && item.quantity !== undefined ? parseFloat(item.quantity) : 1,
+              unit_price: item.unit_price !== null && item.unit_price !== undefined ? parseFloat(item.unit_price) : null,
+              total_price: item.total_price !== null && item.total_price !== undefined ? parseFloat(item.total_price) : null,
+              category: item.category || null,
+              raw_line: item.raw_line || null,
+              line_order: item.line_order !== null && item.line_order !== undefined ? parseInt(item.line_order) : idx
+            })).filter(item => item.item_name !== '');
 
-        alert(`Se han importado ${ticketsToInsert.length} tickets correctamente.`);
+            if (itemsToInsert.length > 0) {
+              const { error: itemsError } = await supabase
+                .from('ticket_items')
+                .insert(itemsToInsert);
+
+              if (itemsError) {
+                console.warn(`Error al importar artículos del ticket ${savedTicket.id}:`, itemsError.message);
+              } else {
+                itemsCount += itemsToInsert.length;
+              }
+            }
+          }
+        }
+
+        alert(`Se han importado ${importedCount} tickets y ${itemsCount} artículos correctamente.`);
         window.location.reload();
       } catch (error) {
         console.error('Error importing tickets:', error.message);
