@@ -56,7 +56,7 @@ const Settings = () => {
     reader.onload = async (event) => {
       try {
         const parsedData = JSON.parse(event.target.result);
-        
+
         if (!Array.isArray(parsedData)) {
           throw new Error('El formato del archivo JSON no es válido. Debe contener una lista de tickets.');
         }
@@ -70,50 +70,102 @@ const Settings = () => {
         let itemsCount = 0;
 
         for (const ticket of parsedData) {
+          // Validate required fields
           if (!ticket.establishment || !ticket.ticket_type || !ticket.total_amount) {
             throw new Error('Formato incompleto. Los campos obligatorios son "establishment", "ticket_type" y "total_amount".');
           }
 
-          // 1. Insertar cabecera del ticket
-          const { data: savedTicket, error: ticketError } = await supabase
-            .from('tickets')
-            .insert({
-              user_id: user.id,
-              ticket_type: ticket.ticket_type,
-              establishment: ticket.establishment.trim(),
-              ticket_date: ticket.ticket_date || new Date().toISOString().split('T')[0],
-              total_amount: parseFloat(ticket.total_amount),
-              image_url: ticket.image_url || null,
-              notes: ticket.notes || null,
-              ticket_reference: ticket.ticket_reference || null
-            })
-            .select()
-            .single();
+          // Determine if ticket already exists
+          let existingTicket = null;
+          // Prefer using ticket.id if provided
+          if (ticket.id) {
+            const { data: found, error: findErr } = await supabase
+              .from('tickets')
+              .select('id')
+              .eq('id', ticket.id)
+              .eq('user_id', user.id)
+              .single();
+            if (!findErr && found) existingTicket = found;
+          }
+          // Fallback strategies
+          if (!existingTicket) {
+            let query = supabase.from('tickets').select('id').eq('user_id', user.id);
+            if (ticket.ticket_reference) {
+              query = query.eq('ticket_reference', ticket.ticket_reference).eq('ticket_date', ticket.ticket_date || null).eq('total_amount', parseFloat(ticket.total_amount));
+            } else if (ticket.establishment) {
+              query = query.eq('establishment', ticket.establishment.trim()).eq('ticket_date', ticket.ticket_date || null).eq('total_amount', parseFloat(ticket.total_amount));
+            }
+            const { data: foundAlt, error: altErr } = await query.single();
+            if (!altErr && foundAlt) existingTicket = foundAlt;
+          }
 
-          if (ticketError) throw ticketError;
+          let ticketId;
+          if (existingTicket) {
+            // Update existing ticket header
+            const { data: updatedTicket, error: updErr } = await supabase
+              .from('tickets')
+              .update({
+                ticket_type: ticket.ticket_type,
+                establishment: ticket.establishment.trim(),
+                ticket_date: ticket.ticket_date || new Date().toISOString().split('T')[0],
+                total_amount: parseFloat(ticket.total_amount),
+                image_url: ticket.image_url || null,
+                notes: ticket.notes || null,
+                ticket_reference: ticket.ticket_reference || null
+              })
+              .eq('id', existingTicket.id)
+              .select()
+              .single();
+            if (updErr) throw updErr;
+            ticketId = updatedTicket.id;
+            // Delete existing items
+            const { error: delItemsErr } = await supabase
+              .from('ticket_items')
+              .delete()
+              .eq('ticket_id', ticketId);
+            if (delItemsErr) console.warn('Error al borrar items previos:', delItemsErr.message);
+          } else {
+            // Insert new ticket
+            const { data: newTicket, error: insertErr } = await supabase
+              .from('tickets')
+              .insert({
+                user_id: user.id,
+                ticket_type: ticket.ticket_type,
+                establishment: ticket.establishment.trim(),
+                ticket_date: ticket.ticket_date || new Date().toISOString().split('T')[0],
+                total_amount: parseFloat(ticket.total_amount),
+                image_url: ticket.image_url || null,
+                notes: ticket.notes || null,
+                ticket_reference: ticket.ticket_reference || null
+              })
+              .select()
+              .single();
+            if (insertErr) throw insertErr;
+            ticketId = newTicket.id;
+          }
+
           importedCount++;
 
-          // 2. Insertar artículos desglosados si existen
-          if (savedTicket && Array.isArray(ticket.ticket_items) && ticket.ticket_items.length > 0) {
+          // Insert items if present
+          if (Array.isArray(ticket.ticket_items) && ticket.ticket_items.length > 0) {
             const itemsToInsert = ticket.ticket_items.map((item, idx) => ({
-              ticket_id: savedTicket.id,
+              ticket_id: ticketId,
               user_id: user.id,
               item_name: (item.item_name || item.name || '').trim(),
-              quantity: item.quantity !== null && item.quantity !== undefined ? parseFloat(item.quantity) : 1,
-              unit_price: item.unit_price !== null && item.unit_price !== undefined ? parseFloat(item.unit_price) : null,
-              total_price: item.total_price !== null && item.total_price !== undefined ? parseFloat(item.total_price) : null,
+              quantity: item.quantity != null && item.quantity != undefined ? parseFloat(item.quantity) : 1,
+              unit_price: item.unit_price != null && item.unit_price != undefined ? parseFloat(item.unit_price) : null,
+              total_price: item.total_price != null && item.total_price != undefined ? parseFloat(item.total_price) : null,
               category: item.category || null,
               raw_line: item.raw_line || null,
-              line_order: item.line_order !== null && item.line_order !== undefined ? parseInt(item.line_order) : idx
-            })).filter(item => item.item_name !== '');
+              line_order: item.line_order != null && item.line_order != undefined ? parseInt(item.line_order) : idx
+            })).filter(i => i.item_name !== '');
 
             if (itemsToInsert.length > 0) {
-              const { error: itemsError } = await supabase
+              const { error: itemsErr } = await supabase
                 .from('ticket_items')
                 .insert(itemsToInsert);
-
-              if (itemsError) {
-                console.warn(`Error al importar artículos del ticket ${savedTicket.id}:`, itemsError.message);
+              if (itemsErr) {
+                console.warn(`Error al importar artículos del ticket ${ticketId}:`, itemsErr.message);
               } else {
                 itemsCount += itemsToInsert.length;
               }
