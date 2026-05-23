@@ -75,10 +75,15 @@ const TicketsCategory = () => {
     { id: 'all', label: 'Todos los tickets', count: stats.all, icon: 'receipt_long', color: 'text-on-surface', bg: 'bg-surface-container' },
   ];
 
-  return (
-    <div className="flex flex-col animate-in slide-in-from-bottom-4 duration-500 max-w-md mx-auto w-full">
-      <h1 className="text-2xl font-headline font-bold text-on-surface mt-6 mb-2">Consulta</h1>
-      <p className="text-on-surface-variant mb-8 text-sm">Explora tus gastos por categoría o visualiza el historial completo.</p>
+return (
+  <div className="flex flex-col animate-in slide-in-from-bottom-4 duration-500 max-w-md mx-auto w-full">
+    <div className="flex items-center mb-4">
+      <button onClick={() => navigate(-1)} className="mr-4 p-2 rounded-full hover:bg-surface-container-high transition-colors text-on-surface">
+        <span className="material-symbols-outlined">arrow_back</span>
+      </button>
+      <h1 className="text-2xl font-headline font-bold text-on-surface">Consulta</h1>
+    </div>
+    <p className="text-on-surface-variant mb-8 text-sm">Explora tus gastos por categoría o visualiza el historial completo.</p>
 
       {loading ? (
         <div className="flex flex-col items-center justify-center py-20 gap-3">

@@ -11,18 +11,9 @@ const Layout = ({ children }) => {
       {/* TopAppBar */}
       <header className="fixed top-0 left-1/2 -translate-x-1/2 w-full max-w-[600px] z-50 bg-surface/80 backdrop-blur-md h-14 flex justify-between items-center px-5 shadow-sm border-b border-outline-variant/10">
         <div className="flex items-center gap-3">
-          {!isHome ? (
-            <button 
-              onClick={() => navigate(-1)} 
-              className="flex items-center justify-center w-10 h-10 rounded-full hover:bg-surface-container-low transition-all active:scale-90"
-            >
-              <span className="material-symbols-outlined text-primary">arrow_back</span>
-            </button>
-          ) : (
-            <div className="w-10 h-10 flex items-center justify-center rounded-full bg-primary/10">
-              <span className="material-symbols-outlined text-primary" style={{ fontVariationSettings: "'FILL' 1" }}>account_balance_wallet</span>
-            </div>
-          )}
+          <div className="w-10 h-10 flex items-center justify-center rounded-full bg-primary/10">
+            <span className="material-symbols-outlined text-primary" style={{ fontVariationSettings: "'FILL' 1" }}>account_balance_wallet</span>
+          </div>
           <span className="text-lg font-headline font-bold text-primary">TicketControl</span>
         </div>
         <button className="flex items-center justify-center w-10 h-10 rounded-full hover:bg-surface-container-low transition-all active:scale-95">

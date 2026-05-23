@@ -493,7 +493,7 @@ const Scanner = () => {
                         </div>
 
                         <div className="flex flex-col gap-0.5">
-                          <span className="text-[8px] font-bold text-on-surface-variant uppercase tracking-wider">Cat</span>
+                          <span className="text-[8px] font-bold text-on-surface-variant uppercase tracking-wider">Familia</span>
                           <select
                             value={item.category || 'otros'}
                             onChange={(e) => handleItemChange(idx, 'category', e.target.value)}

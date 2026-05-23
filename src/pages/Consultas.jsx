@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
@@ -12,6 +12,51 @@ const Consultas = () => {
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [sortBy, setSortBy] = useState('price_asc'); // 'price_asc', 'date_desc'
+  const [suggestions, setSuggestions] = useState([]); // autocomplete suggestions
+  const [showSuggestions, setShowSuggestions] = useState(false);
+
+  // Debounce timer reference
+  const debounceRef = React.useRef(null);
+
+  // Fetch suggestions when searchTerm changes (debounced)
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (!searchTerm.trim()) {
+      setSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
+    debounceRef.current = setTimeout(async () => {
+      try {
+        // Get the authenticated user; if none, skip suggestions
+        const { data: { user: authUser } } = await supabase.auth.getUser();
+        if (!authUser) {
+          setSuggestions([]);
+          setShowSuggestions(false);
+          return;
+        }
+        const { data, error } = await supabase
+          .from('ticket_items')
+          .select('item_name')
+          .eq('user_id', authUser.id)
+          .ilike('item_name', `%${searchTerm.trim()}%`)
+          .limit(5);
+        if (error) throw error;
+        // Extract unique names
+        const names = Array.from(new Set(data.map(d => d.item_name))).filter(Boolean);
+        setSuggestions(names);
+        setShowSuggestions(true);
+      } catch (e) {
+        console.error('Error fetching suggestions:', e);
+        setSuggestions([]);
+        setShowSuggestions(false);
+      }
+    }, 300);
+    // Cleanup on unmount
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [searchTerm]);
 
   const handleSearch = async (e) => {
     if (e) e.preventDefault();
@@ -117,9 +162,29 @@ const Consultas = () => {
             type="text"
             placeholder="Ej. Leche, huevos, café..."
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(e) => {
+              setSearchTerm(e.target.value);
+              setShowSuggestions(true);
+            }}
+            onBlur={() => setTimeout(() => setShowSuggestions(false), 200)} // delay to allow click
             className="w-full h-12 pl-12 pr-4 rounded-xl border border-outline-variant/30 bg-surface-container-low text-on-surface text-sm focus:border-primary focus:outline-none transition-colors"
           />
+          {showSuggestions && suggestions.length > 0 && (
+            <ul className="absolute left-0 right-0 top-full mt-1 bg-surface-container-lowest border border-outline-variant/30 rounded shadow-lg z-10 max-h-48 overflow-y-auto">
+              {suggestions.map((s, idx) => (
+                <li
+                  key={idx}
+                  onMouseDown={() => {
+                    setSearchTerm(s);
+                    setShowSuggestions(false);
+                  }}
+                  className="px-3 py-2 text-sm cursor-pointer hover:bg-primary/10"
+                >
+                  {s}
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
         <button
           type="submit"
